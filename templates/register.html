@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blip — Create Account</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0D0D1A; --surface: #16162A; --surface2: #1E1E38;
+      --pink: #FF6B9D; --purple: #C084FC; --cyan: #67E8F9;
+      --text: #F0EFFF; --muted: #8B8BAD; --border: rgba(255,255,255,0.07);
+    }
+    body { font-family: 'Nunito', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .blob { position: fixed; border-radius: 50%; filter: blur(80px); opacity: 0.15; animation: float 8s ease-in-out infinite; pointer-events: none; }
+    .blob-1 { width: 400px; height: 400px; background: var(--cyan); top: -100px; right: -100px; }
+    .blob-2 { width: 350px; height: 350px; background: var(--purple); bottom: -80px; left: -80px; animation-delay: -3s; }
+    @keyframes float { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-20px); } }
+    .card { position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 48px 44px; width: 420px; box-shadow: 0 24px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08); animation: slideUp 0.5s cubic-bezier(0.16,1,0.3,1) both; }
+    @keyframes slideUp { from { opacity:0; transform: translateY(24px); } to { opacity:1; transform: translateY(0); } }
+    .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+    .logo-icon { width: 48px; height: 48px; background: linear-gradient(135deg, var(--cyan), var(--purple)); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 8px 24px rgba(103,232,249,0.3); }
+    .logo-text { font-size: 28px; font-weight: 900; background: linear-gradient(90deg, var(--cyan), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+    h1 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+    .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+    .field { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+    input { width: 100%; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; color: var(--text); font-family: 'Nunito', sans-serif; font-size: 15px; font-weight: 600; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    input:focus { border-color: var(--cyan); box-shadow: 0 0 0 4px rgba(103,232,249,0.12); }
+    input::placeholder { color: var(--muted); font-weight: 400; }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--cyan), var(--purple)); color: white; font-family: 'Nunito', sans-serif; font-size: 16px; font-weight: 800; cursor: pointer; margin-top: 8px; transition: transform 0.15s, box-shadow 0.15s; box-shadow: 0 8px 24px rgba(103,232,249,0.25); }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(103,232,249,0.35); }
+    .btn:active { transform: translateY(0); }
+    .error { background: rgba(255,107,107,0.12); border: 1px solid rgba(255,107,107,0.3); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: #FF8080; margin-bottom: 18px; font-weight: 600; }
+    .footer { margin-top: 24px; text-align: center; font-size: 14px; color: var(--muted); }
+    .footer a { color: var(--cyan); font-weight: 700; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+    .divider { height: 1px; background: var(--border); margin: 24px 0; }
+    .perks { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+    .perk { background: var(--surface2); border-radius: 20px; padding: 6px 12px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="card">
+    <div class="logo">
+      <div class="logo-icon">✨</div>
+      <div class="logo-text">Blip</div>
+    </div>
+    <h1>Join the fun! 🎉</h1>
+    <p class="subtitle">Create your account and start chatting</p>
+    <div class="perks">
+      <span class="perk">⚡ Real-time</span>
+      <span class="perk">🏠 Multiple rooms</span>
+      <span class="perk">📜 Chat history</span>
+    </div>
+    {% if error %}
+    <div class="error">⚠️ {{ error }}</div>
+    {% endif %}
+    <form method="POST">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="pick a cool name" autocomplete="off" required minlength="2" maxlength="20" />
+        <div class="hint">2–20 characters</div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password" placeholder="••••••••" required minlength="4" />
+        <div class="hint">At least 4 characters</div>
+      </div>
+      <button class="btn" type="submit">Create Account 🚀</button>
+    </form>
+    <div class="divider"></div>
+    <div class="footer">Already have an account? <a href="/login">Sign in</a></div>
+  </div>
+</body>
+</html>
