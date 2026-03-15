@@ -4,7 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Blip — Chat</title>
-  <link rel="icon" type="png/x-icon" href="{{ url_for('static', filename='logo.png')}}">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
@@ -344,7 +343,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="logo">
-      <div class="logo-icon"><div class="logo-icon"><img src="{{ url_for('static', filename='logo.png')}}" alt="logo" height="36px" style="height=36px:auto;vertical-align: middle;"></div>
+      <div class="logo-icon">💬</div>
       <div class="logo-text">Blip</div>
     </div>
     <div class="user-card">
@@ -463,7 +462,7 @@
 </main>
 
 <script>
-  const ME       = {{ session.get('username','')|tojson }};
+  const ME       = {{ username|tojson }};
   const ME_COLOR = {{ avatar_color|tojson }};
   const ME_ID    = {{ user_id }};
 
@@ -570,7 +569,9 @@
 
   // ── Messages ──────────────────────────────────────────────
   function appendMessage(msg, animate = true) {
-    const isSelf = msg.username === ME;
+    // Check by username (case-insensitive) OR by user_id if present
+    const isSelf = msg.username.toLowerCase() === ME.toLowerCase()
+                || (msg.user_id !== undefined && msg.user_id === ME_ID);
     messagesEl.querySelectorAll('.empty-state').forEach(e => e.remove());
     const group = document.createElement('div');
     group.className = 'msg-group';

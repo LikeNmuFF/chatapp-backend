@@ -340,7 +340,7 @@ def get_messages(room_id):
             if not has_access:
                 return jsonify([])
         msgs = db.execute("""
-            SELECT m.id, m.content, m.created_at, u.username, u.avatar_color
+            SELECT m.id, m.user_id, m.content, m.created_at, u.username, u.avatar_color
             FROM messages m JOIN users u ON m.user_id = u.id
             WHERE m.room_id = ? ORDER BY m.created_at DESC LIMIT 80
         """, (room_id,)).fetchall()
