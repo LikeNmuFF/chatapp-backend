@@ -6,7 +6,8 @@ import os
 from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+# Reads SECRET_KEY from Render env var — falls back to random for local dev
+app.secret_key = os.environ.get("SECRET_KEY", os.urandom(24))
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 DB = "chat.db"
@@ -194,6 +195,8 @@ def on_typing(data):
     username = session.get("username", "?")
     emit("typing", {"username": username}, room=room, include_self=False)
 
+# Init DB on startup
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     socketio.run(app, debug=True, host="0.0.0.0", port=5000)
