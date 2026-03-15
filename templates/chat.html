@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Blip — Chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="icon" type="png/x-icon" href="{{ url_for('static', filename='logo.png')}}">
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
   <style>
@@ -343,7 +344,7 @@
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-header">
     <div class="logo">
-      <div class="logo-icon">💬</div>
+      <div class="logo-icon"><img src="{{ url_for('static', filename='logo.png')}}" alt="logo" height="36px" style="height=36px:auto;vertical-align: middle;"></div>
       <div class="logo-text">Blip</div>
     </div>
     <div class="user-card">
