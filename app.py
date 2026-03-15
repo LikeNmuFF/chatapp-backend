@@ -196,4 +196,4 @@ def on_typing(data):
 
 if __name__ == "__main__":
     init_db()
-    socketio.run(debug=False)
+    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
