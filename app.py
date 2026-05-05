@@ -7,12 +7,20 @@ import jwt
 from datetime import datetime, timedelta
 from functools import wraps
 
+# Database configuration
+DATABASE_URL = os.environ.get("DATABASE_URL")
+USE_POSTGRES = DATABASE_URL is not None
+
+if USE_POSTGRES:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your-secret-key-change-in-production")
 JWT_SECRET = os.environ.get("JWT_SECRET", "jwt-secret-key-change-in-production")
 JWT_EXPIRATION = 86400 * 7  # 7 days
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
 DB = "chat.db"
 room_members = {}
@@ -22,49 +30,96 @@ room_members = {}
 # ──────────────────────────────────────────────────────────────────────────────
 
 def get_db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Get database connection (supports SQLite and PostgreSQL)"""
+    if USE_POSTGRES:
+        conn = psycopg2.connect(DATABASE_URL)
+        conn.cursor_factory = RealDictCursor
+        return conn
+    else:
+        conn = sqlite3.connect(DB)
+        conn.row_factory = sqlite3.Row
+        return conn
 
 def init_db():
+    """Initialize database tables"""
     with get_db() as db:
-        db.executescript("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password TEXT NOT NULL,
-                avatar_color TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS rooms (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE NOT NULL,
-                description TEXT,
-                is_global INTEGER DEFAULT 0,
-                is_private INTEGER DEFAULT 0,
-                owner_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (owner_id) REFERENCES users(id)
-            );
-            CREATE TABLE IF NOT EXISTS room_invites (
-                room_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                invited_by INTEGER NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (room_id, user_id),
-                FOREIGN KEY (room_id) REFERENCES rooms(id),
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            );
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                room_id INTEGER NOT NULL,
-                user_id INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (room_id) REFERENCES rooms(id),
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            );
-        """)
+        if USE_POSTGRES:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    avatar_color TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS rooms (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    is_global INTEGER DEFAULT 0,
+                    is_private INTEGER DEFAULT 0,
+                    owner_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_id) REFERENCES users(id)
+                );
+                CREATE TABLE IF NOT EXISTS room_invites (
+                    room_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    invited_by INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (room_id, user_id),
+                    FOREIGN KEY (room_id) REFERENCES rooms(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+                CREATE TABLE IF NOT EXISTS messages (
+                    id SERIAL PRIMARY KEY,
+                    room_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (room_id) REFERENCES rooms(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+            """)
+        else:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    avatar_color TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE IF NOT EXISTS rooms (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    is_global INTEGER DEFAULT 0,
+                    is_private INTEGER DEFAULT 0,
+                    owner_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (owner_id) REFERENCES users(id)
+                );
+                CREATE TABLE IF NOT EXISTS room_invites (
+                    room_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    invited_by INTEGER NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (room_id, user_id),
+                    FOREIGN KEY (room_id) REFERENCES rooms(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    room_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (room_id) REFERENCES rooms(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                );
+            """)
+        
         # Seed default public rooms
         rooms = [
             ("global",  "Everyone is here 🌐", 1, 0),
@@ -75,8 +130,14 @@ def init_db():
         ]
         for name, desc, is_global, is_private in rooms:
             try:
-                db.execute("INSERT INTO rooms (name, description, is_global, is_private) VALUES (?,?,?,?)",
-                           (name, desc, is_global, is_private))
+                if USE_POSTGRES:
+                    db.execute(
+                        "INSERT INTO rooms (name, description, is_global, is_private) VALUES (%s,%s,%s,%s)",
+                        (name, desc, is_global, is_private)
+                    )
+                else:
+                    db.execute("INSERT INTO rooms (name, description, is_global, is_private) VALUES (?,?,?,?)",
+                               (name, desc, is_global, is_private))
             except Exception:
                 pass
         db.commit()
@@ -180,6 +241,13 @@ def format_message_data(msg):
         pass
     return d
 
+def param_style(query):
+    """Convert SQLite ? placeholders to PostgreSQL %s"""
+    if USE_POSTGRES:
+        import re
+        return re.sub(r'\?', '%s', query)
+    return query
+
 # ──────────────────────────────────────────────────────────────────────────────
 # AUTHENTICATION ENDPOINTS
 # ──────────────────────────────────────────────────────────────────────────────
@@ -200,22 +268,33 @@ def api_register():
 
     with get_db() as db:
         try:
-            cur = db.execute(
-                "INSERT INTO users (username, password, avatar_color) VALUES (?,?,?)",
-                (username, hash_pw(password), color)
-            )
-            db.commit()
-            user_id = cur.lastrowid
+            if USE_POSTGRES:
+                cur = db.execute(
+                    "INSERT INTO users (username, password, avatar_color) VALUES (%s,%s,%s) RETURNING id",
+                    (username, hash_pw(password), color)
+                )
+                db.commit()
+                user_id = cur.fetchone()["id"]
+            else:
+                cur = db.execute(
+                    "INSERT INTO users (username, password, avatar_color) VALUES (?,?,?)",
+                    (username, hash_pw(password), color)
+                )
+                db.commit()
+                user_id = cur.lastrowid
             
-            user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+            user = db.execute("SELECT * FROM users WHERE id=%s" if USE_POSTGRES else "SELECT * FROM users WHERE id=?", 
+                             (user_id,)).fetchone()
             token = generate_token(user_id)
             
             return jsonify({
                 "token": token,
                 "user": format_user_data(user)
             }), 201
-        except sqlite3.IntegrityError:
-            return jsonify({"error": "Username already taken"}), 409
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                return jsonify({"error": "Username already taken"}), 409
+            raise
 
 @app.route("/api/auth/login", methods=["POST"])
 def api_login():
