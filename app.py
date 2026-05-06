@@ -794,6 +794,62 @@ def on_typing(data):
 
     emit("typing", {"username": username}, room=room_id, include_self=False)
 
+
+@app.route("/api/auth/profile", methods=["PUT"])
+@token_required
+def update_profile(user_id):
+    """Update user profile"""
+    data = request.get_json()
+    new_username = data.get("username", "").strip()
+
+    if len(new_username) < 2:
+        return jsonify({"error": "Username must be at least 2 characters"}), 400
+
+    with get_db() as db:
+        try:
+            if USE_POSTGRES:
+                db.execute("UPDATE users SET username=%s WHERE id=%s", (new_username, user_id))
+            else:
+                db.execute("UPDATE users SET username=? WHERE id=?", (new_username, user_id))
+            db.commit()
+            
+            user = db.execute("SELECT * FROM users WHERE id=%s" if USE_POSTGRES else "SELECT * FROM users WHERE id=?", 
+                             (user_id,)).fetchone()
+            
+            return jsonify(format_user_data(user)), 200
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                return jsonify({"error": "Username already taken"}), 409
+            return jsonify({"error": "Failed to update profile"}), 500
+
+@app.route("/api/auth/password", methods=["PUT"])
+@token_required
+def change_password(user_id):
+    """Change user password"""
+    data = request.get_json()
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
+
+    if len(new_password) < 4:
+        return jsonify({"error": "New password must be at least 4 characters"}), 400
+
+    with get_db() as db:
+        user = db.execute(
+            "SELECT * FROM users WHERE id=%s AND password=%s" if USE_POSTGRES else "SELECT * FROM users WHERE id=? AND password=?",
+            (user_id, hash_pw(current_password))
+        ).fetchone()
+
+        if not user:
+            return jsonify({"error": "Incorrect current password"}), 401
+
+        if USE_POSTGRES:
+            db.execute("UPDATE users SET password=%s WHERE id=%s", (hash_pw(new_password), user_id))
+        else:
+            db.execute("UPDATE users SET password=? WHERE id=?", (hash_pw(new_password), user_id))
+        db.commit()
+
+    return jsonify({"message": "Password updated successfully"}), 200
+
 # ──────────────────────────────────────────────────────────────────────────────
 # LEGACY HTML ROUTES (for backward compatibility with web)
 # ──────────────────────────────────────────────────────────────────────────────
