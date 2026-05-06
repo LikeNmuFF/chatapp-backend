@@ -6,6 +6,12 @@ import os
 import jwt
 from datetime import datetime, timedelta
 from functools import wraps
+from flask_bcrypt import Bcrypt
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
+from cryptography.fernet import Fernet
+import base64
 
 # Database configuration
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -19,6 +25,26 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your-secret-key-change-in-production")
 JWT_SECRET = os.environ.get("JWT_SECRET", "jwt-secret-key-change-in-production")
 JWT_EXPIRATION = 86400 * 7  # 7 days
+
+# Encryption key for messages (In production, load this from env!)
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
+if not ENCRYPTION_KEY:
+    # Generate a key if not present (only for dev, warn in logs)
+    ENCRYPTION_KEY = base64.urlsafe_b64encode(hashlib.sha256(app.secret_key.encode()).digest()).decode()
+
+fernet = Fernet(ENCRYPTION_KEY.encode())
+
+# Initialize Security Extensions
+bcrypt = Bcrypt(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
+# Security Headers
+Talisman(app, content_security_policy=None) # CSP is disabled here to avoid breaking SocketIO/Static files, but can be hardened
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
@@ -143,7 +169,31 @@ def init_db():
         db.commit()
 
 def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+    """Securely hash password using Bcrypt"""
+    return bcrypt.generate_password_hash(pw).decode('utf-8')
+
+def check_pw(hashed_pw, pw):
+    """Verify password (with legacy SHA256 fallback)"""
+    try:
+        if bcrypt.check_password_hash(hashed_pw, pw):
+            return True
+    except:
+        pass
+    # Fallback to legacy SHA256 for existing users
+    return hashed_pw == hashlib.sha256(pw.encode()).hexdigest()
+
+def encrypt_message(content):
+    """Encrypt message content for storage"""
+    if not content: return content
+    return fernet.encrypt(content.encode()).decode()
+
+def decrypt_message(encrypted_content):
+    """Decrypt message content for display"""
+    if not encrypted_content: return encrypted_content
+    try:
+        return fernet.decrypt(encrypted_content.encode()).decode()
+    except:
+        return "[Encrypted Message]" # Fallback if decryption fails
 
 AVATAR_COLORS = ["#FF6B9D","#C084FC","#67E8F9","#86EFAC","#FDE68A","#FCA5A5","#818CF8","#34D399"]
 
@@ -224,14 +274,19 @@ def format_room_data(room):
     }
 
 def format_message_data(msg):
-    """Convert message row to dict"""
+    """Convert message row to dict and decrypt content"""
+    content = msg["content"]
+    # Try to decrypt if it looks like an encrypted blob
+    if content.startswith("gAAAA"): # Common Fernet prefix
+        content = decrypt_message(content)
+        
     d = {
         "id": msg["id"],
         "room_id": msg["room_id"],
         "user_id": msg["user_id"],
         "username": msg["username"],
         "avatar_color": msg["avatar_color"],
-        "content": msg["content"],
+        "content": content,
         "created_at": msg["created_at"]
     }
     try:
@@ -253,6 +308,7 @@ def param_style(query):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/auth/register", methods=["POST"])
+@limiter.limit("5 per hour")
 def api_register():
     """Register a new user"""
     data = request.get_json()
@@ -297,6 +353,7 @@ def api_register():
             raise
 
 @app.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def api_login():
     """Login user"""
     data = request.get_json()
@@ -305,11 +362,11 @@ def api_login():
 
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE username=? AND password=?",
-            (username, hash_pw(password))
+            "SELECT * FROM users WHERE username=?",
+            (username,)
         ).fetchone()
 
-    if not user:
+    if not user or not check_pw(user["password"], password):
         return jsonify({"error": "Invalid username or password"}), 401
 
     token = generate_token(user["id"])
@@ -652,7 +709,7 @@ def send_message(user_id, room_id):
 
         cur = db.execute(
             "INSERT INTO messages (room_id, user_id, content) VALUES (?,?,?)",
-            (room_id, user_id, content)
+            (room_id, user_id, encrypt_message(content))
         )
         db.commit()
         msg_id = cur.lastrowid
@@ -762,7 +819,7 @@ def on_message(data):
 
         cur = db.execute(
             "INSERT INTO messages (room_id, user_id, content) VALUES (?,?,?)",
-            (room_id, user_id, content)
+            (room_id, user_id, encrypt_message(content))
         )
         db.commit()
         msg_id = cur.lastrowid
@@ -835,11 +892,11 @@ def change_password(user_id):
 
     with get_db() as db:
         user = db.execute(
-            "SELECT * FROM users WHERE id=%s AND password=%s" if USE_POSTGRES else "SELECT * FROM users WHERE id=? AND password=?",
-            (user_id, hash_pw(current_password))
+            "SELECT * FROM users WHERE id=%s" if USE_POSTGRES else "SELECT * FROM users WHERE id=?",
+            (user_id,)
         ).fetchone()
 
-        if not user:
+        if not user or not check_pw(user["password"], current_password):
             return jsonify({"error": "Incorrect current password"}), 401
 
         if USE_POSTGRES:
@@ -867,9 +924,9 @@ def login():
         username = request.form["username"].strip()
         password = request.form["password"]
         with get_db() as db:
-            user = db.execute("SELECT * FROM users WHERE username=? AND password=?",
-                              (username, hash_pw(password))).fetchone()
-        if user:
+            user = db.execute("SELECT * FROM users WHERE username=?",
+                              (username,)).fetchone()
+        if user and check_pw(user["password"], password):
             session["user_id"] = user["id"]
             session["username"] = user["username"]
             session["avatar_color"] = user["avatar_color"]

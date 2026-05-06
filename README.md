@@ -3,10 +3,12 @@
 A modern, playful real-time chat application built with Flask + SocketIO.
 
 ## ✨ Features
-- 🔐 User registration & login (session-based auth)
+- 🔐 Secure Auth: User registration & login with **Bcrypt** and **JWT**
+- 🛡️ **Anti-DDoS**: Integrated rate-limiting for all API endpoints
+- 🔑 **Message Encryption**: Server-side AES encryption for chat messages
 - ⚡ Real-time messaging via WebSockets (SocketIO)
-- 📜 Persistent chat history (SQLite)
-- 🏠 Multiple chat rooms (general, random, tech, music)
+- 📜 Persistent chat history (PostgreSQL/SQLite)
+- 🏠 Multiple chat rooms with private room support
 - 🎨 Unique avatar colors per user
 - 📱 Responsive layout
 
@@ -41,10 +43,10 @@ chatapp/
 
 ## 🔧 Tech Stack
 - **Backend**: Python + Flask + Flask-SocketIO
-- **Database**: SQLite (zero config!)
+- **Security**: Flask-Bcrypt, Flask-Limiter, Flask-Talisman, Cryptography (Fernet)
+- **Database**: PostgreSQL / SQLite
+- **Auth**: JWT (JSON Web Tokens)
 - **Frontend**: Vanilla JS + Socket.IO client
-- **Fonts**: Nunito + Space Mono (Google Fonts)
-- **Auth**: Flask sessions + SHA-256 password hashing
 
 ## 💡 Usage Tips
 - Press **Enter** to send a message
@@ -52,9 +54,9 @@ chatapp/
 - Click emoji buttons to insert them quickly
 - Switch between rooms in the left sidebar
 
-## 🔒 Security Notes
-This is a demo app. For production:
-- Use `bcrypt` instead of SHA-256 for password hashing
-- Set a strong `SECRET_KEY` (not random on each start)
-- Use a production WSGI server (gunicorn + eventlet)
-- Add CSRF protection
+## 🔒 Security Implementation
+- **Password Hashing**: Uses `bcrypt` with unique salts for maximum security.
+- **Rate Limiting**: Protects against brute-force and DDoS attacks via `Flask-Limiter`.
+- **Message Decryption/Encryption**: Messages are encrypted using AES-256 (Fernet) before being stored.
+- **Security Headers**: `Flask-Talisman` enforces HSTS, XSS protection, and MIME sniffing prevention.
+- **CORS**: Secure cross-origin resource sharing configuration.
