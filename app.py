@@ -39,7 +39,6 @@ bcrypt = Bcrypt(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://",
 )
 
@@ -308,7 +307,6 @@ def param_style(query):
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.route("/api/auth/register", methods=["POST"])
-@limiter.limit("5 per hour")
 def api_register():
     """Register a new user"""
     data = request.get_json()
@@ -353,7 +351,6 @@ def api_register():
             raise
 
 @app.route("/api/auth/login", methods=["POST"])
-@limiter.limit("10 per minute")
 def api_login():
     """Login user"""
     data = request.get_json()
